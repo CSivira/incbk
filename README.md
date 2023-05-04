@@ -1,7 +1,6 @@
 # incbk
 Incremental backup script in bash
 
-
 ## TODO
 - Better progress log (flag -p) that shows data units and current file 
   transferred.
@@ -11,3 +10,4 @@ Incremental backup script in bash
   .config file.
 - Debug option (o flag) that enables set -o xtrace.
 - Project description and user guide
+- Simplify text format with functions
