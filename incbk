@@ -1,0 +1,87 @@
+#!/bin/bash
+
+# ------------------------------------------------------------------------------
+# invbk
+# A script to perform incremental backups using rsync
+# ------------------------------------------------------------------------------
+
+# Import config
+readonly SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+. $SCRIPT_DIR/.config 
+
+# Default rsync flags
+RSYNC_FLAGS=(-aAXHx --delete)
+Q_FLAG=FALSE
+V_FLAG=
+D_FLAG=
+I_FLAG=
+P_FLAG=
+
+# Get args
+while [ $# -gt 0 ]; do
+    if [[ $1 == -* ]]; then
+        # Process flags
+        while getopts "vqdip" arg; do
+            case $arg in
+                v) V_FLAG=-v;;
+                q) Q_FLAG=TRUE;;
+                d) D_FLAG=--dry-run;;
+                i) I_FLAG=--inplace;;
+                p) P_FLAG=--info=progress2;;
+            esac
+        done
+    else
+        # Check profiles
+        if [ -n "${SOURCES[$1]:-}" ]; then
+            PROFILE=$1
+            echo -e "\033[32m\033[1mBuilding backup for $PROFILE...\033[0m\033[0m"
+        else
+            echo -e "\033[31m\033[1mProfile $1 is not defined\033[0m\033[0m"
+            exit 1
+        fi
+    fi
+  shift
+done
+
+# Final flags for rsync commmand
+RSYNC_FLAGS+=($V_FLAG $D_FLAG $I_FLAG $P_FLAG)
+
+# Backup Setup
+readonly SOURCE_DIR=${SOURCES[$PROFILE]}
+readonly DATETIME="$(date '+%Y-%m-%d_%H:%M:%S')"
+readonly BACKUP_DIR="${DESTINATION_PATH}/"$PROFILE
+readonly BACKUP_PATH="${BACKUP_DIR}/${DATETIME}"
+readonly LATEST_LINK="${BACKUP_DIR}/latest"
+readonly IGNORE_FILE="${SCRIPT_DIR}/.bkignore."$PROFILE
+
+function backup() {
+    sudo mkdir -p "${BACKUP_DIR}"
+
+    sudo rsync "${RSYNC_FLAGS[@]}" \
+        "${SOURCE_DIR}/" \
+        --link-dest "${LATEST_LINK}" \
+        --exclude-from="${IGNORE_FILE}" \
+        "${BACKUP_PATH}" \
+
+    sudo rm -rf "${LATEST_LINK}"
+    sudo ln -s "${BACKUP_PATH}" "${LATEST_LINK}"
+}
+
+if [[ $Q_FLAG == TRUE ]]; then
+    backup # Quiet run
+else
+    # Interactive mode ask for confirmation
+    echo -e "\n\033[33m\033[1mINCREMENTAL BACKUP SETUP\033[0m\033[0m\n"
+    echo -e "\033[34m\033[1mSource:\033[0m\033[0m ${SOURCE_DIR}"
+    echo -e "\033[34m\033[1mDestination:\033[0m\033[0m ${BACKUP_DIR}"
+    echo -e "\033[34m\033[1mExcluding:\n\033[0m\033[0m$(< $IGNORE_FILE)\n"
+    read -p $'Are you sure you want to continue? (\033[32my\033[0m/\033[31mn\033[0m)' -n 1 -r
+    echo
+
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        backup
+        echo -e "\033[32m\033[1mSuccess :)\033[0m\033[0m"
+    else
+        echo -e "\033[31m\033[1mAbort :(\033[0m\033[0m"
+    fi
+fi
